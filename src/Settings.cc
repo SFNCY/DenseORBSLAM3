@@ -333,19 +333,26 @@ namespace ORB_SLAM3 {
             static_cast<KannalaBrandt8*>(calibration2_)->mvLappingArea = vOverlapping;
         }
 
-        //Load stereo extrinsic calibration
-        if(cameraType_ == Rectified){
-            b_ = readParameter<float>(fSettings,"Stereo.b",found);
-            bf_ = b_ * calibration1_->getParameter(0);
-        }
-        else{
-            cv::Mat cvTlr = readParameter<cv::Mat>(fSettings,"Stereo.T_c1_c2",found);
-            Tlr_ = Converter::toSophus(cvTlr);
+        // Load stereo extrinsic calibration
+        if (cameraType_ == Rectified) {
+          b_ = readParameter<float>(fSettings, "Stereo.b", found);
+          bf_ = b_ * calibration1_->getParameter(0);
 
-            //TODO: also search for Trl and invert if necessary
+          // Rectified stereo: Camera 2 shares the same intrinsics as Camera 1
+          vector<float> vCalibration2 = {
+              calibration1_->getParameter(0), calibration1_->getParameter(1),
+              calibration1_->getParameter(2), calibration1_->getParameter(3)};
+          calibration2_ = new Pinhole(vCalibration2);
+          originalCalib2_ = new Pinhole(vCalibration2);
+        } else {
+          cv::Mat cvTlr =
+              readParameter<cv::Mat>(fSettings, "Stereo.T_c1_c2", found);
+          Tlr_ = Converter::toSophus(cvTlr);
 
-            b_ = Tlr_.translation().norm();
-            bf_ = b_ * calibration1_->getParameter(0);
+          // TODO: also search for Trl and invert if necessary
+
+          b_ = Tlr_.translation().norm();
+          bf_ = b_ * calibration1_->getParameter(0);
         }
 
         thDepth_ = readParameter<float>(fSettings,"Stereo.ThDepth",found);

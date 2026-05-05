@@ -394,8 +394,8 @@ int main(int argc, char **argv) {
         rs2::video_frame color_frame = processed.first(align_to);
         rs2::depth_frame depth_frame = processed.get_depth_frame();
 
-        im = cv::Mat(cv::Size(width_img, height_img), CV_8UC3, (void*)(color_frame.get_data()), cv::Mat::AUTO_STEP);
-        depth = cv::Mat(cv::Size(width_img, height_img), CV_16U, (void*)(depth_frame.get_data()), cv::Mat::AUTO_STEP);
+        im = cv::Mat(cv::Size(width_img, height_img), CV_8UC3, (void*)(color_frame.get_data()), cv::Mat::AUTO_STEP).clone();
+        depth = cv::Mat(cv::Size(width_img, height_img), CV_16U, (void*)(depth_frame.get_data()), cv::Mat::AUTO_STEP).clone();
 
         /*cv::Mat depthCV_8U;
         depthCV.convertTo(depthCV_8U,CV_8U,0.01);

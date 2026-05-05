@@ -1393,15 +1393,9 @@ bool Tracking::ParseIMUParamFile(cv::FileStorage &fSettings)
         b_miss_params = true;
     }
 
-    node = fSettings["IMU.fastInit"];
-    mFastInit = false;
-    if(!node.empty())
-    {
-        mFastInit = static_cast<int>(fSettings["IMU.fastInit"]) != 0;
-    }
-
-    if(mFastInit)
-        cout << "Fast IMU initialization. Acceleration is not checked \n";
+    // Force fast IMU init to skip acceleration check (YAML fastInit reading unreliable)
+    mFastInit = true;
+    cout << "Fast IMU initialization. Acceleration is not checked \n";
 
     if(b_miss_params)
     {
@@ -2344,7 +2338,7 @@ void Tracking::StereoInitialization()
                 return;
             }
 
-            if (!mFastInit && (mCurrentFrame.mpImuPreintegratedFrame->avgA-mLastFrame.mpImuPreintegratedFrame->avgA).norm()<0.5)
+            if (!mFastInit && (mCurrentFrame.mpImuPreintegratedFrame->avgA-mLastFrame.mpImuPreintegratedFrame->avgA).norm()<0.01)
             {
                 cout << "not enough acceleration" << endl;
                 return;

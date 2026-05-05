@@ -139,7 +139,7 @@ int main(int argc, char **argv) {
             ++index;
             if (index == 1) {
                 sensor.set_option(RS2_OPTION_ENABLE_AUTO_EXPOSURE, 1);
-                sensor.set_option(RS2_OPTION_AUTO_EXPOSURE_LIMIT,5000);
+                // sensor.set_option(RS2_OPTION_AUTO_EXPOSURE_LIMIT,5000); // Commented due to known crash (GH Issue #554)
                 sensor.set_option(RS2_OPTION_EMITTER_ENABLED, 0); // switch off emitter
             }
             // std::cout << "  " << index << " : " << sensor.get_info(RS2_CAMERA_INFO_NAME) << std::endl;
@@ -204,8 +204,13 @@ int main(int argc, char **argv) {
             rs2::video_frame ir_frameL = fs.get_infrared_frame(1);
             rs2::video_frame ir_frameR = fs.get_infrared_frame(2);
 
-            imCV = cv::Mat(cv::Size(width_img, height_img), CV_8U, (void*)(ir_frameL.get_data()), cv::Mat::AUTO_STEP);
-            imRightCV = cv::Mat(cv::Size(width_img, height_img), CV_8U, (void*)(ir_frameR.get_data()), cv::Mat::AUTO_STEP);
+            imCV = cv::Mat(cv::Size(width_img, height_img), CV_8U,
+                           (void *)(ir_frameL.get_data()), cv::Mat::AUTO_STEP)
+                       .clone();
+            imRightCV =
+                cv::Mat(cv::Size(width_img, height_img), CV_8U,
+                        (void *)(ir_frameR.get_data()), cv::Mat::AUTO_STEP)
+                    .clone();
 
             timestamp_image = fs.get_timestamp()*1e-3;
             image_ready = true;
