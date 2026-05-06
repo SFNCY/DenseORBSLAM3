@@ -62,9 +62,17 @@ set -e
 # ------------------------------------------------------------------------------
 export LD_LIBRARY_PATH=/home/yucheng/3rdlib/Pangolin-0.9.4/install/lib:$LD_LIBRARY_PATH
 
-./Examples/build/stereo_inertial_realsense_D435i \
+# ./Examples/build/stereo_inertial_realsense_D435i \
+#     Vocabulary/ORBvoc.txt \
+#     Examples/Stereo-Inertial/RealSense_D435i.yaml
+
+# ./Examples/build/rgbd_inertial_realsense_D435i \
+#     Vocabulary/ORBvoc.txt \
+#     Examples/RGB-D-Inertial/RealSense_D435i.yaml
+
+./Examples/build/rgbd_realsense_D435i\
     Vocabulary/ORBvoc.txt \
-    Examples/Stereo-Inertial/RealSense_D435i.yaml
+    Examples/RGB-D/RealSense_D435i.yaml
 # ------------------------------------------------------------------------------
 #
 # Requirements:

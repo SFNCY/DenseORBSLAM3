@@ -1336,6 +1336,17 @@ vector<cv::KeyPoint> System::GetTrackedKeyPointsUn()
     return mTrackedKeyPointsUn;
 }
 
+unsigned long System::GetKeyFramesInMap()
+{
+    return mpAtlas->GetCurrentMap()->KeyFramesInMap();
+}
+
+void System::SetDenseCloud(const std::vector<Eigen::Vector3f> &vPoints, const std::vector<Eigen::Matrix<unsigned char,3,1>> &vColors)
+{
+    if(mpViewer)
+        mpViewer->SetDenseCloud(vPoints, vColors);
+}
+
 double System::GetTimeFromIMUInit()
 {
     double aux = mpLocalMapper->GetCurrKFTime()-mpLocalMapper->mFirstTs;

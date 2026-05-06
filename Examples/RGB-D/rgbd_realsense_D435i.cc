@@ -34,6 +34,7 @@
 
 
 #include <System.h>
+#include "PointCloudFusion.h"
 
 using namespace std;
 
@@ -314,6 +315,15 @@ int main(int argc, char **argv) {
 
     double t_resize = 0.f;
     double t_track = 0.f;
+
+    // Dense point cloud fusion
+    ORB_SLAM3::CameraIntrinsics camIntrinsics(
+        intrinsics_cam.fx, intrinsics_cam.fy,
+        intrinsics_cam.ppx, intrinsics_cam.ppy,
+        intrinsics_cam.width, intrinsics_cam.height);
+    std::vector<ORB_SLAM3::DensePoint> globalCloud;
+    unsigned long lastKFCount = 0;
+    int totalKFUsed = 0;
     rs2::frameset fs;
 
     while (!SLAM.isShutDown())
@@ -389,7 +399,51 @@ int main(int argc, char **argv) {
     #endif
 #endif
         // Pass the image to the SLAM system
-        SLAM.TrackRGBD(im, depth, timestamp); //, vImuMeas); depthCV
+        Sophus::SE3f Tcw = SLAM.TrackRGBD(im, depth, timestamp); //, vImuMeas); depthCV
+
+        // === Dense Point Cloud Fusion ===
+        if(SLAM.GetTrackingState() == 2) {  // Tracking OK
+            unsigned long kfCount = SLAM.GetKeyFramesInMap();
+            if(kfCount > lastKFCount) {
+                lastKFCount = kfCount;
+                totalKFUsed++;
+
+                // Convert depth from CV_16U (mm) to CV_32F (meters)
+                cv::Mat depth32F;
+                depth.convertTo(depth32F, CV_32F, 1.0f / 1000.0f);
+
+                // Extract dense points for this keyframe
+                // depthFactor=1.0 because depth32F is already in meters
+                std::vector<ORB_SLAM3::DensePoint> framePoints =
+                    ORB_SLAM3::DepthToWorldPoints(im, depth32F, Tcw, camIntrinsics, 4, 1.0f, 40.0f);
+
+                globalCloud.insert(globalCloud.end(), framePoints.begin(), framePoints.end());
+
+                {
+                    size_t displayStride = std::max(size_t(1), globalCloud.size() / 100000);
+                    std::vector<Eigen::Vector3f> vDisplayPoints;
+                    std::vector<Eigen::Matrix<unsigned char,3,1>> vDisplayColors;
+                    if(displayStride > 0 && globalCloud.size() > displayStride) {
+                        vDisplayPoints.reserve(globalCloud.size() / displayStride + 1);
+                        vDisplayColors.reserve(globalCloud.size() / displayStride + 1);
+                    }
+                    for(size_t i = 0; i < globalCloud.size(); i += displayStride) {
+                        const auto &pt = globalCloud[i];
+                        vDisplayPoints.push_back(pt.pos);
+                        vDisplayColors.push_back(Eigen::Matrix<unsigned char,3,1>(pt.r, pt.g, pt.b));
+                    }
+                    SLAM.SetDenseCloud(vDisplayPoints, vDisplayColors);
+                }
+
+                // Debug: show camera position and first few world points
+                Eigen::Vector3f camPos = Tcw.translation();
+                std::cout << "[DenseFusion] KF #" << totalKFUsed
+                          << " (total KFs: " << kfCount << ")"
+                          << " | Camera at (" << camPos.x() << ", " << camPos.y() << ", " << camPos.z() << ")"
+                          << " | Frame pts: " << framePoints.size()
+                          << " | Total pts: " << globalCloud.size() << std::endl;
+            }
+        }
 
 #ifdef REGISTER_TIMES
     #ifdef COMPILEDWITHC11
@@ -402,6 +456,20 @@ int main(int argc, char **argv) {
 #endif
     }
     cout << "System shutdown!\n";
+
+    // === Save Dense Point Cloud ===
+    if(!globalCloud.empty()) {
+        std::cout << "Downsampling point cloud from " << globalCloud.size() << " points..." << std::endl;
+        std::vector<ORB_SLAM3::DensePoint> downsampled = ORB_SLAM3::VoxelGridDownsample(globalCloud, 0.01f);
+        std::cout << "Downsampled to " << downsampled.size() << " points." << std::endl;
+        if(ORB_SLAM3::WritePLY("dense_cloud.ply", downsampled)) {
+            std::cout << "Saved dense point cloud: dense_cloud.ply" << std::endl;
+        } else {
+            std::cerr << "Failed to save dense point cloud!" << std::endl;
+        }
+    } else {
+        std::cout << "No points collected for dense cloud." << std::endl;
+    }
 }
 
 rs2_stream find_stream_to_align(const std::vector<rs2::stream_profile>& streams)

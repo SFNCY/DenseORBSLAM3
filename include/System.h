@@ -176,6 +176,9 @@ public:
     int GetTrackingState();
     std::vector<MapPoint*> GetTrackedMapPoints();
     std::vector<cv::KeyPoint> GetTrackedKeyPointsUn();
+    unsigned long GetKeyFramesInMap();
+
+    void SetDenseCloud(const std::vector<Eigen::Vector3f> &vPoints, const std::vector<Eigen::Matrix<unsigned char,3,1>> &vColors);
 
     // For debugging
     double GetTimeFromIMUInit();

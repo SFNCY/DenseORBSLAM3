@@ -59,6 +59,8 @@ public:
 
     bool isStepByStep();
 
+    void SetDenseCloud(const std::vector<Eigen::Vector3f> &vPoints, const std::vector<Eigen::Matrix<unsigned char,3,1>> &vColors);
+
     void Release();
 
     //void SetTrackingPause();

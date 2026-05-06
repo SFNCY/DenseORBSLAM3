@@ -20,6 +20,7 @@
 #include "MapPoint.h"
 #include "KeyFrame.h"
 #include <pangolin/pangolin.h>
+#include <pangolin/gl/gl.h>
 #include <mutex>
 
 namespace ORB_SLAM3
@@ -463,5 +464,30 @@ void MapDrawer::GetCurrentOpenGLCameraMatrix(pangolin::OpenGlMatrix &M, pangolin
     MOw.m[12] = Twc(0,3);
     MOw.m[13] = Twc(1,3);
     MOw.m[14] = Twc(2,3);
+}
+
+void MapDrawer::SetDenseCloud(const std::vector<Eigen::Vector3f> &vPoints, const std::vector<Eigen::Matrix<unsigned char,3,1>> &vColors)
+{
+    std::unique_lock<std::mutex> lock(mMutexDense);
+    mvDensePoints = vPoints;
+    mvDenseColors = vColors;
+}
+
+void MapDrawer::DrawDensePoints()
+{
+    std::unique_lock<std::mutex> lock(mMutexDense);
+    if(mvDensePoints.empty())
+        return;
+
+    glPointSize(mPointSize * 1.5f);
+    glBegin(GL_POINTS);
+
+    for(size_t i = 0; i < mvDensePoints.size(); ++i)
+    {
+        glColor3ub(mvDenseColors[i](0), mvDenseColors[i](1), mvDenseColors[i](2));
+        glVertex3f(mvDensePoints[i](0), mvDensePoints[i](1), mvDensePoints[i](2));
+    }
+
+    glEnd();
 }
 } //namespace ORB_SLAM

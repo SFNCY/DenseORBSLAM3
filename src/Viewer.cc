@@ -314,6 +314,7 @@ void Viewer::Run()
             mpMapDrawer->DrawKeyFrames(menuShowKeyFrames,menuShowGraph, menuShowInertialGraph, menuShowOptLba);
         if(menuShowPoints)
             mpMapDrawer->DrawMapPoints();
+        mpMapDrawer->DrawDensePoints();
 
         pangolin::FinishFrame();
 
@@ -442,6 +443,11 @@ void Viewer::Release()
 {
     unique_lock<mutex> lock(mMutexStop);
     mbStopped = false;
+}
+
+void Viewer::SetDenseCloud(const std::vector<Eigen::Vector3f> &vPoints, const std::vector<Eigen::Matrix<unsigned char,3,1>> &vColors)
+{
+    mpMapDrawer->SetDenseCloud(vPoints, vColors);
 }
 
 /*void Viewer::SetTrackingPause()

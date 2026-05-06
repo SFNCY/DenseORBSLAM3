@@ -25,8 +25,10 @@
 #include"KeyFrame.h"
 #include "Settings.h"
 #include<pangolin/pangolin.h>
+#include<Eigen/Dense>
 
 #include<mutex>
+#include<vector>
 
 namespace ORB_SLAM3
 {
@@ -44,11 +46,14 @@ public:
     Atlas* mpAtlas;
 
     void DrawMapPoints();
+    void DrawDensePoints();
     void DrawKeyFrames(const bool bDrawKF, const bool bDrawGraph, const bool bDrawInertialGraph, const bool bDrawOptLba);
     void DrawCurrentCamera(pangolin::OpenGlMatrix &Twc);
     void SetCurrentCameraPose(const Sophus::SE3f &Tcw);
     void SetReferenceKeyFrame(KeyFrame *pKF);
     void GetCurrentOpenGLCameraMatrix(pangolin::OpenGlMatrix &M, pangolin::OpenGlMatrix &MOw);
+
+    void SetDenseCloud(const std::vector<Eigen::Vector3f> &vPoints, const std::vector<Eigen::Matrix<unsigned char,3,1>> &vColors);
 
 private:
 
@@ -64,6 +69,10 @@ private:
     Sophus::SE3f mCameraPose;
 
     std::mutex mMutexCamera;
+
+    std::vector<Eigen::Vector3f> mvDensePoints;
+    std::vector<Eigen::Matrix<unsigned char,3,1>> mvDenseColors;
+    std::mutex mMutexDense;
 
     float mfFrameColors[6][3] = {{0.0f, 0.0f, 1.0f},
                                 {0.8f, 0.4f, 1.0f},
