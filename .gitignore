@@ -94,6 +94,7 @@
 
 install
 build
+build_test
 .cache
 lib
 

@@ -31,6 +31,7 @@
 #include <boost/algorithm/string.hpp>
 #include <thread>
 #include <mutex>
+#include <functional>
 #include "Thirdparty/g2o/g2o/types/types_seven_dof_expmap.h"
 
 namespace ORB_SLAM3
@@ -57,6 +58,8 @@ public:
     void SetTracker(Tracking* pTracker);
 
     void SetLocalMapper(LocalMapping* pLocalMapper);
+
+    void SetLoopClosureCallback(std::function<void()> callback);
 
     // Main function
     void Run();
@@ -239,6 +242,8 @@ protected:
 
     // To (de)activate LC
     bool mbActiveLC = true;
+
+    std::function<void()> mLoopClosureCallback;
 
 #ifdef REGISTER_LOOP
     string mstrFolderLoop;

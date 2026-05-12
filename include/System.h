@@ -79,6 +79,20 @@ class Tracking;
 class LocalMapping;
 class LoopClosing;
 class Settings;
+class DenseMeshReconstruction;
+
+/**
+ * @brief Statistics for dense mesh reconstruction
+ */
+struct DenseMeshStats {
+    int total_integrations;
+    int total_extractions;
+    int current_vertices;
+    int current_triangles;
+
+    DenseMeshStats() : total_integrations(0), total_extractions(0),
+                       current_vertices(0), current_triangles(0) {}
+};
 
 class System
 {
@@ -195,6 +209,15 @@ public:
     void InsertTrackTime(double& time);
 #endif
 
+#ifdef DENSE_MESH_ENABLED
+    void PushRGBDFrame(const cv::Mat& imRGB, const cv::Mat& imDepth, const double& timestamp);
+    void SaveFinalMesh(const std::string& dir = ".");
+    void EnableDenseMesh(const std::string& output_dir = ".");
+    void DisableDenseMesh();
+    DenseMeshStats GetDenseMeshStats() const;
+    void SetLoopClosureCallback(std::function<void()> callback);
+#endif
+
 private:
 
     void SaveAtlas(int type);
@@ -265,6 +288,12 @@ private:
     string mStrVocabularyFilePath;
 
     Settings* settings_;
+
+#ifdef DENSE_MESH_ENABLED
+    DenseMeshReconstruction* mpDenseMesh;
+    bool mbDenseMeshEnabled;
+    std::function<void()> mLoopClosureCallback;
+#endif
 };
 
 }// namespace ORB_SLAM

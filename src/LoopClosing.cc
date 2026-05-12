@@ -86,6 +86,11 @@ void LoopClosing::SetLocalMapper(LocalMapping *pLocalMapper)
     mpLocalMapper=pLocalMapper;
 }
 
+void LoopClosing::SetLoopClosureCallback(std::function<void()> callback)
+{
+    mLoopClosureCallback = callback;
+}
+
 
 void LoopClosing::Run()
 {
@@ -1204,6 +1209,10 @@ void LoopClosing::CorrectLoop()
         mnCorrectionGBA = mnNumCorrection;
 
         mpThreadGBA = new thread(&LoopClosing::RunGlobalBundleAdjustment, this, pLoopMap, mpCurrentKF->mnId);
+    }
+
+    if(mLoopClosureCallback) {
+        mLoopClosureCallback();
     }
 
     // Loop closed. Release Local Mapping.

@@ -36,6 +36,10 @@
 #include <System.h>
 #include "PointCloudFusion.h"
 
+// Dense mesh reconstruction options
+// USE_DENSE_CLOUD_FALLBACK is now controlled by CMake option (default ON)
+// Set USE_DENSE_CLOUD_FALLBACK=0 when DENSE_MESH_ENABLED is ON to use mesh-only mode
+
 using namespace std;
 
 bool b_continue_session;
@@ -310,6 +314,10 @@ int main(int argc, char **argv) {
     ORB_SLAM3::System SLAM(argv[1],argv[2],ORB_SLAM3::System::RGBD, true, 0, file_name);
     float imageScale = SLAM.GetImageScale();
 
+#ifdef DENSE_MESH_ENABLED
+    SLAM.EnableDenseMesh();
+#endif
+
     double timestamp;
     cv::Mat im, depth;
 
@@ -317,6 +325,7 @@ int main(int argc, char **argv) {
     double t_track = 0.f;
 
     // Dense point cloud fusion
+#if USE_DENSE_CLOUD_FALLBACK
     ORB_SLAM3::CameraIntrinsics camIntrinsics(
         intrinsics_cam.fx, intrinsics_cam.fy,
         intrinsics_cam.ppx, intrinsics_cam.ppy,
@@ -325,6 +334,7 @@ int main(int argc, char **argv) {
     unsigned long lastKFCount = 0;
     int totalKFUsed = 0;
     rs2::frameset fs;
+#endif
 
     while (!SLAM.isShutDown())
     {
@@ -401,7 +411,12 @@ int main(int argc, char **argv) {
         // Pass the image to the SLAM system
         Sophus::SE3f Tcw = SLAM.TrackRGBD(im, depth, timestamp); //, vImuMeas); depthCV
 
+#ifdef DENSE_MESH_ENABLED
+        SLAM.PushRGBDFrame(im, depth, timestamp);
+#endif
+
         // === Dense Point Cloud Fusion ===
+#if USE_DENSE_CLOUD_FALLBACK
         if(SLAM.GetTrackingState() == 2) {  // Tracking OK
             unsigned long kfCount = SLAM.GetKeyFramesInMap();
             if(kfCount > lastKFCount) {
@@ -444,6 +459,7 @@ int main(int argc, char **argv) {
                           << " | Total pts: " << globalCloud.size() << std::endl;
             }
         }
+#endif
 
 #ifdef REGISTER_TIMES
     #ifdef COMPILEDWITHC11
@@ -458,6 +474,7 @@ int main(int argc, char **argv) {
     cout << "System shutdown!\n";
 
     // === Save Dense Point Cloud ===
+#if USE_DENSE_CLOUD_FALLBACK
     if(!globalCloud.empty()) {
         std::cout << "Downsampling point cloud from " << globalCloud.size() << " points..." << std::endl;
         std::vector<ORB_SLAM3::DensePoint> downsampled = ORB_SLAM3::VoxelGridDownsample(globalCloud, 0.01f);
@@ -470,6 +487,7 @@ int main(int argc, char **argv) {
     } else {
         std::cout << "No points collected for dense cloud." << std::endl;
     }
+#endif
 }
 
 rs2_stream find_stream_to_align(const std::vector<rs2::stream_profile>& streams)

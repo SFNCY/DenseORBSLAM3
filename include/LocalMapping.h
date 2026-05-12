@@ -28,6 +28,14 @@
 #include "Settings.h"
 
 #include <mutex>
+#include <atomic>
+#include <shared_mutex>
+
+#ifdef DENSE_MESH_ENABLED
+#include "KeyFrameRGBDData.h"
+#include "DenseMeshReconstruction.h"
+#include "PointCloudFusion.h"
+#endif
 
 
 namespace ORB_SLAM3
@@ -183,6 +191,54 @@ protected:
     void ScaleRefinement();
 
     bool bInitializing;
+
+#ifdef DENSE_MESH_ENABLED
+    // Lock order to prevent deadlock: 1) queue_mutex_, 2) DenseMeshReconstruction::mutex_
+    KeyFrameRGBDQueue rgbd_queue_;
+    std::shared_mutex queue_mutex_;
+    DenseMeshReconstruction dense_mesh_;
+    std::atomic<int> kf_processed_count_;
+    std::string mesh_output_dir_;
+    MeshReconConfig mesh_config_;
+
+    // Loop closure aware reintegration members
+    static constexpr size_t MAX_KF_RGBD_HISTORY = 1000;
+    std::map<unsigned long, KeyFrameRGBD> kf_rgbd_history_;
+    bool integration_paused_;
+    bool loop_correction_flag_;
+    int kf_processed_count_snapshot_;
+
+    /**
+     * @brief Called when loop closure is detected
+     * Sets integration_paused_, saves kf_processed_count_ snapshot,
+     * clears dense mesh, and sets flag for re-integration
+     */
+    void OnLoopClosureDetected();
+
+    /**
+     * @brief Re-integrate all keyframes from history with corrected poses
+     */
+    void ReIntegrateAllKeyFrames();
+
+    /**
+     * @brief Push RGB-D frame data to the processing queue (thread-safe)
+     * @param imRGB RGB image
+     * @param imDepth Depth image
+     * @param kfId KeyFrame ID
+     * @param timestamp Frame timestamp
+     * @param intrinsics Camera intrinsics
+     */
+    void PushFrameData(const cv::Mat& imRGB, const cv::Mat& imDepth,
+                       unsigned long kfId, double timestamp,
+                       const CameraIntrinsics& intrinsics);
+
+    /**
+     * @brief Process pending frames from the RGB-D queue
+     * @param pKF Current keyframe being processed
+     * @return true if mesh was extracted and saved
+     */
+    bool ProcessPendingDenseFrames(KeyFrame* pKF);
+#endif
 
     Eigen::MatrixXd infoInertial;
     int mNumLM;
