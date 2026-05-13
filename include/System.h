@@ -215,6 +215,9 @@ public:
     void EnableDenseMesh(const std::string& output_dir = ".");
     void DisableDenseMesh();
     DenseMeshStats GetDenseMeshStats() const;
+    void SetDenseMesh(const std::vector<Eigen::Vector3f> &vVertices,
+                      const std::vector<Eigen::Vector3i> &vTriangles,
+                      const std::vector<Eigen::Matrix<unsigned char,3,1>> &vColors);
     void SetLoopClosureCallback(std::function<void()> callback);
 #endif
 
@@ -290,7 +293,6 @@ private:
     Settings* settings_;
 
 #ifdef DENSE_MESH_ENABLED
-    DenseMeshReconstruction* mpDenseMesh;
     bool mbDenseMeshEnabled;
     std::function<void()> mLoopClosureCallback;
 #endif

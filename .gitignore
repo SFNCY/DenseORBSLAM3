@@ -95,6 +95,7 @@
 install
 build
 build_test
+build_debug
 .cache
 lib
 

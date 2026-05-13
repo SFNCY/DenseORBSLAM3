@@ -139,6 +139,8 @@ public:
 #endif
 protected:
 
+    friend class System;
+
     bool CheckNewKeyFrames();
     void ProcessNewKeyFrame();
     void CreateNewMapPoints();

@@ -473,6 +473,50 @@ void MapDrawer::SetDenseCloud(const std::vector<Eigen::Vector3f> &vPoints, const
     mvDenseColors = vColors;
 }
 
+void MapDrawer::SetDenseMesh(const std::vector<Eigen::Vector3f> &vVertices,
+                              const std::vector<Eigen::Vector3i> &vTriangles,
+                              const std::vector<Eigen::Matrix<unsigned char,3,1>> &vColors)
+{
+    std::unique_lock<std::mutex> lock(mMutexMesh);
+    mvMeshVertices = vVertices;
+    mvMeshTriangles = vTriangles;
+    mvMeshColors = vColors;
+}
+
+void MapDrawer::DrawDenseMesh()
+{
+    std::unique_lock<std::mutex> lock(mMutexMesh);
+    if(mvMeshTriangles.empty())
+        return;
+
+    glDisable(GL_LIGHTING);
+    glBegin(GL_TRIANGLES);
+    for(const auto& tri : mvMeshTriangles)
+    {
+        if(tri(0) >= (int)mvMeshVertices.size() ||
+           tri(1) >= (int)mvMeshVertices.size() ||
+           tri(2) >= (int)mvMeshVertices.size())
+            continue;
+
+        const auto& v0 = mvMeshVertices[tri(0)];
+        const auto& v1 = mvMeshVertices[tri(1)];
+        const auto& v2 = mvMeshVertices[tri(2)];
+
+        if(tri(0) < (int)mvMeshColors.size())
+            glColor3ub(mvMeshColors[tri(0)](0), mvMeshColors[tri(0)](1), mvMeshColors[tri(0)](2));
+        glVertex3f(v0(0), v0(1), v0(2));
+
+        if(tri(1) < (int)mvMeshColors.size())
+            glColor3ub(mvMeshColors[tri(1)](0), mvMeshColors[tri(1)](1), mvMeshColors[tri(1)](2));
+        glVertex3f(v1(0), v1(1), v1(2));
+
+        if(tri(2) < (int)mvMeshColors.size())
+            glColor3ub(mvMeshColors[tri(2)](0), mvMeshColors[tri(2)](1), mvMeshColors[tri(2)](2));
+        glVertex3f(v2(0), v2(1), v2(2));
+    }
+    glEnd();
+}
+
 void MapDrawer::DrawDensePoints()
 {
     std::unique_lock<std::mutex> lock(mMutexDense);

@@ -12,12 +12,17 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall   -O3 -Wno-array-bounds")
 set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -march=native")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=native")
 
-# Check C++14 or C++11 support
+# Check C++17, C++14 or C++11 support
 include(CheckCXXCompilerFlag)
+CHECK_CXX_COMPILER_FLAG("-std=c++17" COMPILER_SUPPORTS_CXX17)
 CHECK_CXX_COMPILER_FLAG("-std=c++14" COMPILER_SUPPORTS_CXX14)
 CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
 CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
-if(COMPILER_SUPPORTS_CXX14)
+if(COMPILER_SUPPORTS_CXX17)
+   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
+   add_definitions(-DCOMPILEDWITHC17)
+   message(STATUS "Using flag -std=c++17.")
+elseif(COMPILER_SUPPORTS_CXX14)
    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
    add_definitions(-DCOMPILEDWITHC11)
    message(STATUS "Using flag -std=c++14.")
@@ -73,6 +78,7 @@ ${Pangolin_INCLUDE_DIRS}
 
 if(DENSE_MESH)
     include_directories(${PROJECT_NAME} ${Open3D_INCLUDE_DIRS})
+    include_directories(${PROJECT_SOURCE_DIR}/Examples/RGB-D)
 endif()
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
@@ -145,6 +151,7 @@ if(DENSE_MESH)
     target_sources(${PROJECT_NAME} PRIVATE
         include/KeyFrameRGBDData.h
         include/DenseMeshReconstruction.h
+        src/DenseMeshReconstruction.cc
     )
 endif()
 
@@ -189,6 +196,9 @@ if(realsense2_FOUND)
         target_compile_definitions(rgbd_realsense_D435i PRIVATE USE_DENSE_CLOUD_FALLBACK=1)
     else()
         target_compile_definitions(rgbd_realsense_D435i PRIVATE USE_DENSE_CLOUD_FALLBACK=0)
+    endif()
+    if(DENSE_MESH)
+        target_compile_definitions(rgbd_realsense_D435i PRIVATE DENSE_MESH_ENABLED)
     endif()
 endif()
 

@@ -189,6 +189,8 @@ void Viewer::Run()
     pangolin::Var<bool> menuStep("menu.Step",false,false);
 
     pangolin::Var<bool> menuShowOptLba("menu.Show LBA opt", false, true);
+    pangolin::Var<bool> menuShowDenseCloud("menu.Show Dense Cloud", true, true);
+    pangolin::Var<bool> menuShowDenseMesh("menu.Show Dense Mesh", true, true);
     // Define Camera Render Object (for view / scene browsing)
     pangolin::OpenGlRenderState s_cam(
                 pangolin::ProjectionMatrix(1024,768,mViewpointF,mViewpointF,512,389,0.1,1000),
@@ -314,7 +316,10 @@ void Viewer::Run()
             mpMapDrawer->DrawKeyFrames(menuShowKeyFrames,menuShowGraph, menuShowInertialGraph, menuShowOptLba);
         if(menuShowPoints)
             mpMapDrawer->DrawMapPoints();
-        mpMapDrawer->DrawDensePoints();
+        if(menuShowDenseCloud)
+            mpMapDrawer->DrawDensePoints();
+        if(menuShowDenseMesh)
+            mpMapDrawer->DrawDenseMesh();
 
         pangolin::FinishFrame();
 
@@ -345,6 +350,8 @@ void Viewer::Run()
             menuShowInertialGraph = true;
             menuShowKeyFrames = true;
             menuShowPoints = true;
+            menuShowDenseCloud = true;
+            menuShowDenseMesh = true;
             menuLocalizationMode = false;
             if(bLocalizationMode)
                 mpSystem->DeactivateLocalizationMode();
@@ -448,6 +455,13 @@ void Viewer::Release()
 void Viewer::SetDenseCloud(const std::vector<Eigen::Vector3f> &vPoints, const std::vector<Eigen::Matrix<unsigned char,3,1>> &vColors)
 {
     mpMapDrawer->SetDenseCloud(vPoints, vColors);
+}
+
+void Viewer::SetDenseMesh(const std::vector<Eigen::Vector3f> &vVertices,
+                           const std::vector<Eigen::Vector3i> &vTriangles,
+                           const std::vector<Eigen::Matrix<unsigned char,3,1>> &vColors)
+{
+    mpMapDrawer->SetDenseMesh(vVertices, vTriangles, vColors);
 }
 
 /*void Viewer::SetTrackingPause()

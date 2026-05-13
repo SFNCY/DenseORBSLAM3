@@ -43,7 +43,7 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     mSensor(sensor), mpViewer(static_cast<Viewer*>(NULL)), mbReset(false), mbResetActiveMap(false),
     mbActivateLocalizationMode(false), mbDeactivateLocalizationMode(false), mbShutDown(false)
 #ifdef DENSE_MESH_ENABLED
-    , mpDenseMesh(nullptr), mbDenseMeshEnabled(false)
+    , mbDenseMeshEnabled(false)
 #endif
 {
     // Output welcome message
@@ -1368,7 +1368,6 @@ void System::SetDenseCloud(const std::vector<Eigen::Vector3f> &vPoints, const st
 void System::EnableDenseMesh(const std::string& output_dir)
 {
     if (!mbDenseMeshEnabled) {
-        mpDenseMesh = new DenseMeshReconstruction();
         mbDenseMeshEnabled = true;
     }
     if (mpLocalMapper) {
@@ -1417,6 +1416,14 @@ DenseMeshStats System::GetDenseMeshStats() const
     stats.current_vertices = mpLocalMapper->dense_mesh_.GetVertexCount();
     stats.current_triangles = mpLocalMapper->dense_mesh_.GetTriangleCount();
     return stats;
+}
+
+void System::SetDenseMesh(const std::vector<Eigen::Vector3f> &vVertices,
+                           const std::vector<Eigen::Vector3i> &vTriangles,
+                           const std::vector<Eigen::Matrix<unsigned char,3,1>> &vColors)
+{
+    if(mpViewer)
+        mpViewer->SetDenseMesh(vVertices, vTriangles, vColors);
 }
 
 void System::SetLoopClosureCallback(std::function<void()> callback)

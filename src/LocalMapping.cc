@@ -53,7 +53,7 @@ LocalMapping::LocalMapping(System* pSys, Atlas *pAtlas, const float bMonocular, 
 #ifdef DENSE_MESH_ENABLED
     kf_processed_count_ = 0;
     mesh_output_dir_ = ".";
-    mesh_config_ = MeshReconConfig(0.005f, 0.02f, 3, 3.0f);
+    mesh_config_ = MeshReconConfig(0.02f, 0.08f, 20, 3.0f);
     dense_mesh_ = DenseMeshReconstruction(mesh_config_);
     integration_paused_ = false;
     loop_correction_flag_ = false;
@@ -1099,7 +1099,7 @@ bool LocalMapping::ProcessPendingDenseFrames(KeyFrame* pKF)
         Sophus::SE3f Tcw = pKF->GetPose();
         CameraIntrinsics intrinsics = CameraIntrinsics(
             pKF->fx, pKF->fy, pKF->cx, pKF->cy,
-            pKF->mnBaseKF->imWidth, pKF->mnBaseKF->imHeight
+            static_cast<int>(pKF->mnMaxX), static_cast<int>(pKF->mnMaxY)
         );
 
         dense_mesh_.IntegrateRGBD(frame_data.imRGB, frame_data.imDepth, Tcw, intrinsics);
@@ -1108,6 +1108,25 @@ bool LocalMapping::ProcessPendingDenseFrames(KeyFrame* pKF)
 
     if (kf_processed_count_ > 0 && kf_processed_count_ % mesh_config_.update_every_n_kf == 0) {
         if (dense_mesh_.ExtractMesh(false)) {
+            // Send mesh to Viewer for visualization
+            std::vector<Eigen::Vector3d> verts_d;
+            std::vector<Eigen::Vector3i> tris;
+            std::vector<Eigen::Vector3d> colors_d;
+            dense_mesh_.GetMeshData(verts_d, tris, colors_d);
+
+            std::vector<Eigen::Vector3f> verts_f(verts_d.size());
+            std::vector<Eigen::Matrix<unsigned char,3,1>> colors_uc(verts_d.size());
+            for(size_t i = 0; i < verts_d.size(); ++i) {
+                verts_f[i] = verts_d[i].cast<float>();
+                if(i < colors_d.size()) {
+                    colors_uc[i] = Eigen::Matrix<unsigned char,3,1>(
+                        static_cast<unsigned char>(std::min(colors_d[i](0)*255.0, 255.0)),
+                        static_cast<unsigned char>(std::min(colors_d[i](1)*255.0, 255.0)),
+                        static_cast<unsigned char>(std::min(colors_d[i](2)*255.0, 255.0)));
+                }
+            }
+            mpSystem->SetDenseMesh(verts_f, tris, colors_uc);
+
             std::ostringstream oss;
             oss << "mesh_" << std::setw(4) << std::setfill('0') << pKF->mnId << ".ply";
             std::string filename = mesh_output_dir_ + "/" + oss.str();
@@ -1122,18 +1141,22 @@ bool LocalMapping::ProcessPendingDenseFrames(KeyFrame* pKF)
 }
 
 void LocalMapping::PushFrameData(const cv::Mat& imRGB, const cv::Mat& imDepth,
-                                  unsigned long kfId, double timestamp,
-                                  const CameraIntrinsics& intrinsics)
+                                   unsigned long kfId, double timestamp,
+                                   const CameraIntrinsics& intrinsics)
 {
     KeyFrameRGBD frame(imRGB.clone(), imDepth.clone(), timestamp, kfId);
-    rgbd_queue_.Push(std::move(frame));
 
-    std::unique_lock<std::shared_mutex> lock(queue_mutex_);
-    if(kf_rgbd_history_.size() >= MAX_KF_RGBD_HISTORY) {
-        auto oldest = kf_rgbd_history_.begin();
-        kf_rgbd_history_.erase(oldest);
+    // Store in history BEFORE moving to queue (cv::Mat move empties source)
+    {
+        std::unique_lock<std::shared_mutex> lock(queue_mutex_);
+        if(kf_rgbd_history_.size() >= MAX_KF_RGBD_HISTORY) {
+            auto oldest = kf_rgbd_history_.begin();
+            kf_rgbd_history_.erase(oldest);
+        }
+        kf_rgbd_history_[kfId] = frame;
     }
-    kf_rgbd_history_[kfId] = frame;
+
+    rgbd_queue_.Push(std::move(frame));
 }
 
 void LocalMapping::OnLoopClosureDetected()
@@ -1160,7 +1183,7 @@ void LocalMapping::ReIntegrateAllKeyFrames()
             Sophus::SE3f Tcw = pKF->GetPose();
             CameraIntrinsics intrinsics = CameraIntrinsics(
                 pKF->fx, pKF->fy, pKF->cx, pKF->cy,
-                pKF->mnBaseKF->imWidth, pKF->mnBaseKF->imHeight
+                static_cast<int>(pKF->mnMaxX), static_cast<int>(pKF->mnMaxY)
             );
             dense_mesh_.IntegrateRGBD(frame_data.imRGB, frame_data.imDepth, Tcw, intrinsics);
             reintegrated_count++;
