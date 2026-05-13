@@ -42,6 +42,9 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
                const bool bUseViewer, const int initFr, const string &strSequence):
     mSensor(sensor), mpViewer(static_cast<Viewer*>(NULL)), mbReset(false), mbResetActiveMap(false),
     mbActivateLocalizationMode(false), mbDeactivateLocalizationMode(false), mbShutDown(false)
+#ifdef DENSE_MESH_ENABLED
+    , mbDenseMeshEnabled(false)
+#endif
 {
     // Output welcome message
     cout << endl <<
@@ -222,6 +225,14 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
 
     mpLoopCloser->SetTracker(mpTracker);
     mpLoopCloser->SetLocalMapper(mpLocalMapper);
+
+#ifdef DENSE_MESH_ENABLED
+    mpLoopCloser->SetLoopClosureCallback([this]() {
+        if(mpLocalMapper) {
+            mpLocalMapper->OnLoopClosureDetected();
+        }
+    });
+#endif
 
     //usleep(10*1000*1000);
 
@@ -556,6 +567,12 @@ void System::Shutdown()
 
 #ifdef REGISTER_TIMES
     mpTracker->PrintTimeStats();
+#endif
+
+#ifdef DENSE_MESH_ENABLED
+    if (mbDenseMeshEnabled) {
+        SaveFinalMesh(".");
+    }
 #endif
 
 
@@ -1346,6 +1363,79 @@ void System::SetDenseCloud(const std::vector<Eigen::Vector3f> &vPoints, const st
     if(mpViewer)
         mpViewer->SetDenseCloud(vPoints, vColors);
 }
+
+#ifdef DENSE_MESH_ENABLED
+void System::EnableDenseMesh(const std::string& output_dir)
+{
+    if (!mbDenseMeshEnabled) {
+        mbDenseMeshEnabled = true;
+    }
+    if (mpLocalMapper) {
+        mpLocalMapper->mesh_output_dir_ = output_dir;
+    }
+}
+
+void System::DisableDenseMesh()
+{
+    mbDenseMeshEnabled = false;
+}
+
+void System::PushRGBDFrame(const cv::Mat& imRGB, const cv::Mat& imDepth, const double& timestamp)
+{
+    if (!mbDenseMeshEnabled || !mpLocalMapper)
+        return;
+
+    unsigned long kfId = mpTracker->mCurrentFrame.mnId;
+    CameraIntrinsics intrinsics(Frame::fx, Frame::fy, Frame::cx, Frame::cy,
+                                Frame::mnMaxX, Frame::mnMaxY);
+    mpLocalMapper->PushFrameData(imRGB, imDepth, kfId, timestamp, intrinsics);
+}
+
+void System::SaveFinalMesh(const std::string& dir)
+{
+    if (!mbDenseMeshEnabled || !mpLocalMapper)
+        return;
+
+    if (mpLocalMapper->dense_mesh_.ExtractMesh(false)) {
+        std::string ply_filename = dir + "/mesh_final.ply";
+        std::string obj_filename = dir + "/mesh_final.obj";
+        mpLocalMapper->dense_mesh_.SaveMeshPLY(ply_filename);
+        mpLocalMapper->dense_mesh_.SaveMeshOBJ(obj_filename);
+    }
+}
+
+DenseMeshStats System::GetDenseMeshStats() const
+{
+    DenseMeshStats stats;
+    if (!mbDenseMeshEnabled || !mpLocalMapper)
+        return stats;
+
+    MeshStats mesh_stats = mpLocalMapper->dense_mesh_.GetStats();
+    stats.total_integrations = mesh_stats.total_integrations;
+    stats.total_extractions = mesh_stats.total_extractions;
+    stats.current_vertices = mpLocalMapper->dense_mesh_.GetVertexCount();
+    stats.current_triangles = mpLocalMapper->dense_mesh_.GetTriangleCount();
+    return stats;
+}
+
+void System::SetDenseMesh(const std::vector<Eigen::Vector3f> &vVertices,
+                           const std::vector<Eigen::Vector3i> &vTriangles,
+                           const std::vector<Eigen::Matrix<unsigned char,3,1>> &vColors)
+{
+    if(mpViewer)
+        mpViewer->SetDenseMesh(vVertices, vTriangles, vColors);
+}
+
+void System::SetLoopClosureCallback(std::function<void()> callback)
+{
+#ifdef DENSE_MESH_ENABLED
+    mLoopClosureCallback = callback;
+    if (mpLoopCloser && callback) {
+        mpLoopCloser->SetLoopClosureCallback(callback);
+    }
+#endif
+}
+#endif
 
 double System::GetTimeFromIMUInit()
 {

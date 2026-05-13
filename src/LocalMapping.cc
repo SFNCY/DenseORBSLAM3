@@ -25,6 +25,7 @@
 #include "GeometricTools.h"
 
 #include<mutex>
+#include<shared_mutex>
 #include<chrono>
 
 namespace ORB_SLAM3
@@ -47,6 +48,16 @@ LocalMapping::LocalMapping(System* pSys, Atlas *pAtlas, const float bMonocular, 
 #ifdef REGISTER_TIMES
     nLBA_exec = 0;
     nLBA_abort = 0;
+#endif
+
+#ifdef DENSE_MESH_ENABLED
+    kf_processed_count_ = 0;
+    mesh_output_dir_ = ".";
+    mesh_config_ = MeshReconConfig(0.005f, 0.02f, 1, 3.0f);
+    dense_mesh_ = DenseMeshReconstruction(mesh_config_);
+    integration_paused_ = false;
+    loop_correction_flag_ = false;
+    kf_processed_count_snapshot_ = 0;
 #endif
 
 }
@@ -197,6 +208,10 @@ void LocalMapping::Run()
                 vdKFCulling_ms.push_back(timeKFCulling_ms);
 #endif
 
+#ifdef DENSE_MESH_ENABLED
+                ProcessPendingDenseFrames(mpCurrentKeyFrame);
+#endif
+
                 if ((mTinit<50.0f) && mbInertial)
                 {
                     if(mpCurrentKeyFrame->GetMap()->isImuInitialized() && mpTracker->mState==Tracking::OK) // Enter here everytime local-mapping is called
@@ -258,13 +273,24 @@ void LocalMapping::Run()
         }
         else if(Stop() && !mbBadImu)
         {
-            // Safe area to stop
             while(isStopped() && !CheckFinish())
             {
                 usleep(3000);
             }
             if(CheckFinish())
                 break;
+
+#ifdef DENSE_MESH_ENABLED
+            if(loop_correction_flag_) {
+                loop_correction_flag_ = false;
+                integration_paused_ = true;
+                kf_processed_count_snapshot_ = kf_processed_count_;
+                dense_mesh_.Clear();
+                kf_processed_count_ = 0;
+                ReIntegrateAllKeyFrames();
+                integration_paused_ = false;
+            }
+#endif
         }
 
         ResetIfRequested();
@@ -273,7 +299,17 @@ void LocalMapping::Run()
         SetAcceptKeyFrames(true);
 
         if(CheckFinish())
+        {
+#ifdef DENSE_MESH_ENABLED
+            if (dense_mesh_.ExtractMesh(false)) {
+                std::string final_filename = mesh_output_dir_ + "/mesh_final.ply";
+                if (dense_mesh_.SaveMeshPLY(final_filename)) {
+                    cout << "LM: Saved final mesh: " << final_filename << endl;
+                }
+            }
+#endif
             break;
+        }
 
         usleep(3000);
     }
@@ -1053,6 +1089,106 @@ void LocalMapping::KeyFrameCulling()
     }
 }
 
+#ifdef DENSE_MESH_ENABLED
+bool LocalMapping::ProcessPendingDenseFrames(KeyFrame* pKF)
+{
+    if (!pKF) return false;
+
+    bool frames_integrated = false;
+    KeyFrameRGBD frame_data;
+    while (rgbd_queue_.Pop(frame_data)) {
+        Sophus::SE3f Tcw = pKF->GetPose();
+        CameraIntrinsics intrinsics = CameraIntrinsics(
+            pKF->fx, pKF->fy, pKF->cx, pKF->cy,
+            static_cast<int>(pKF->mnMaxX), static_cast<int>(pKF->mnMaxY)
+        );
+
+        dense_mesh_.IntegrateRGBD(frame_data.imRGB, frame_data.imDepth, Tcw, intrinsics);
+        kf_processed_count_++;
+        frames_integrated = true;
+    }
+
+    if (frames_integrated) {
+        if (dense_mesh_.ExtractMesh(false)) {
+            // Send mesh to Viewer for visualization
+            std::vector<Eigen::Vector3d> verts_d;
+            std::vector<Eigen::Vector3i> tris;
+            std::vector<Eigen::Vector3d> colors_d;
+            dense_mesh_.GetMeshData(verts_d, tris, colors_d);
+
+            std::vector<Eigen::Vector3f> verts_f(verts_d.size());
+            std::vector<Eigen::Matrix<unsigned char,3,1>> colors_uc(verts_d.size());
+            for(size_t i = 0; i < verts_d.size(); ++i) {
+                verts_f[i] = verts_d[i].cast<float>();
+                if(i < colors_d.size()) {
+                    colors_uc[i] = Eigen::Matrix<unsigned char,3,1>(
+                        static_cast<unsigned char>(std::min(colors_d[i](0)*255.0, 255.0)),
+                        static_cast<unsigned char>(std::min(colors_d[i](1)*255.0, 255.0)),
+                        static_cast<unsigned char>(std::min(colors_d[i](2)*255.0, 255.0)));
+                }
+            }
+            mpSystem->SetDenseMesh(verts_f, tris, colors_uc);
+            return true;
+        }
+    }
+    return false;
+}
+
+void LocalMapping::PushFrameData(const cv::Mat& imRGB, const cv::Mat& imDepth,
+                                   unsigned long kfId, double timestamp,
+                                   const CameraIntrinsics& intrinsics)
+{
+    KeyFrameRGBD frame(imRGB.clone(), imDepth.clone(), timestamp, kfId);
+
+    // Store in history BEFORE moving to queue (cv::Mat move empties source)
+    {
+        std::unique_lock<std::shared_mutex> lock(queue_mutex_);
+        if(kf_rgbd_history_.size() >= MAX_KF_RGBD_HISTORY) {
+            auto oldest = kf_rgbd_history_.begin();
+            kf_rgbd_history_.erase(oldest);
+        }
+        kf_rgbd_history_[kfId] = frame;
+    }
+
+    rgbd_queue_.Push(std::move(frame));
+}
+
+void LocalMapping::OnLoopClosureDetected()
+{
+    integration_paused_ = true;
+    kf_processed_count_snapshot_ = kf_processed_count_;
+    loop_correction_flag_ = true;
+}
+
+void LocalMapping::ReIntegrateAllKeyFrames()
+{
+    std::vector<KeyFrame*> allKFs = mpAtlas->GetAllKeyFrames();
+    sort(allKFs.begin(), allKFs.end(), KeyFrame::lId);
+
+    int reintegrated_count = 0;
+    for(KeyFrame* pKF : allKFs) {
+        if(pKF->isBad())
+            continue;
+
+        std::shared_lock<std::shared_mutex> lock(queue_mutex_);
+        auto it = kf_rgbd_history_.find(pKF->mnId);
+        if(it != kf_rgbd_history_.end()) {
+            const KeyFrameRGBD& frame_data = it->second;
+            Sophus::SE3f Tcw = pKF->GetPose();
+            CameraIntrinsics intrinsics = CameraIntrinsics(
+                pKF->fx, pKF->fy, pKF->cx, pKF->cy,
+                static_cast<int>(pKF->mnMaxX), static_cast<int>(pKF->mnMaxY)
+            );
+            dense_mesh_.IntegrateRGBD(frame_data.imRGB, frame_data.imDepth, Tcw, intrinsics);
+            reintegrated_count++;
+        }
+    }
+
+    kf_processed_count_ = reintegrated_count;
+    cout << "LM: Re-integrated " << reintegrated_count << " keyframes after loop closure" << endl;
+}
+#endif
+
 void LocalMapping::RequestReset()
 {
     {
@@ -1111,13 +1247,11 @@ void LocalMapping::ResetIfRequested()
             mbResetRequested = false;
             mbResetRequestedActiveMap = false;
 
-            // Inertial parameters
-            mTinit = 0.f;
-            mbNotBA2 = true;
-            mbNotBA1 = true;
-            mbBadImu=false;
-
-            mIdxInit=0;
+#ifdef DENSE_MESH_ENABLED
+            rgbd_queue_.Clear();
+            dense_mesh_.Clear();
+            kf_processed_count_ = 0;
+#endif
 
             cout << "LM: End reseting Local Mapping..." << endl;
         }
@@ -1136,6 +1270,13 @@ void LocalMapping::ResetIfRequested()
 
             mbResetRequested = false;
             mbResetRequestedActiveMap = false;
+
+#ifdef DENSE_MESH_ENABLED
+            rgbd_queue_.Clear();
+            dense_mesh_.Clear();
+            kf_processed_count_ = 0;
+#endif
+
             cout << "LM: End reseting Local Mapping..." << endl;
         }
     }

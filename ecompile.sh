@@ -35,12 +35,12 @@ export LD_LIBRARY_PATH=/home/yucheng/3rdlib/Pangolin-0.9.4/install/lib:$LD_LIBRA
 #     Examples/Monocular/EuRoC_TimeStamps/V101.txt \
 #     V101_mono
 
-./Examples/build/stereo_euroc \
-    Vocabulary/ORBvoc.txt \
-    Examples/Stereo/EuRoC.yaml \
-    /media/yucheng/Data/Data/ORB-SLAM3/vicon_room1/V1_01_easy/V1_01_easy \
-    Examples/Stereo/EuRoC_TimeStamps/V101.txt \
-    V101_mono
+# ./Examples/build/stereo_euroc \
+#     Vocabulary/ORBvoc.txt \
+#     Examples/Stereo/EuRoC.yaml \
+#     /media/yucheng/Data/Data/ORB-SLAM3/vicon_room1/V1_01_easy/V1_01_easy \
+#     Examples/Stereo/EuRoC_TimeStamps/V101.txt \
+#     V101_mono
 
 # ./Examples/build/stereo_inertial_euroc \
 #     Vocabulary/ORBvoc.txt \
@@ -77,14 +77,14 @@ export LD_LIBRARY_PATH=/home/yucheng/3rdlib/Pangolin-0.9.4/install/lib:$LD_LIBRA
 # # Example Command:
 # # ------------------------------------------------------------------------------
 
-# # ./Examples/build/stereo_inertial_realsense_D435i \
-# #     Vocabulary/ORBvoc.txt \
-# #     Examples/Stereo-Inertial/RealSense_D435i.yaml
+# ./Examples/build/stereo_inertial_realsense_D435i \
+#     Vocabulary/ORBvoc.txt \
+#     Examples/Stereo-Inertial/RealSense_D435i.yaml
 
 # # ./Examples/build/rgbd_inertial_realsense_D435i \
 # #     Vocabulary/ORBvoc.txt \
 # #     Examples/RGB-D-Inertial/RealSense_D435i.yaml
 
-# ./Examples/build/rgbd_realsense_D435i\
-#     Vocabulary/ORBvoc.txt \
-#     Examples/RGB-D/RealSense_D435i.yaml
+./Examples/build/rgbd_realsense_D435i\
+    Vocabulary/ORBvoc.txt \
+    Examples/RGB-D/RealSense_D435i.yaml

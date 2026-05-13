@@ -54,6 +54,10 @@ public:
     void GetCurrentOpenGLCameraMatrix(pangolin::OpenGlMatrix &M, pangolin::OpenGlMatrix &MOw);
 
     void SetDenseCloud(const std::vector<Eigen::Vector3f> &vPoints, const std::vector<Eigen::Matrix<unsigned char,3,1>> &vColors);
+    void SetDenseMesh(const std::vector<Eigen::Vector3f> &vVertices,
+                      const std::vector<Eigen::Vector3i> &vTriangles,
+                      const std::vector<Eigen::Matrix<unsigned char,3,1>> &vColors);
+    void DrawDenseMesh();
 
 private:
 
@@ -73,6 +77,11 @@ private:
     std::vector<Eigen::Vector3f> mvDensePoints;
     std::vector<Eigen::Matrix<unsigned char,3,1>> mvDenseColors;
     std::mutex mMutexDense;
+
+    std::vector<Eigen::Vector3f> mvMeshVertices;
+    std::vector<Eigen::Vector3i> mvMeshTriangles;
+    std::vector<Eigen::Matrix<unsigned char,3,1>> mvMeshColors;
+    std::mutex mMutexMesh;
 
     float mfFrameColors[6][3] = {{0.0f, 0.0f, 1.0f},
                                 {0.8f, 0.4f, 1.0f},

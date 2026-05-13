@@ -12,12 +12,17 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall   -O3 -Wno-array-bounds")
 set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -march=native")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=native")
 
-# Check C++14 or C++11 support
+# Check C++17, C++14 or C++11 support
 include(CheckCXXCompilerFlag)
+CHECK_CXX_COMPILER_FLAG("-std=c++17" COMPILER_SUPPORTS_CXX17)
 CHECK_CXX_COMPILER_FLAG("-std=c++14" COMPILER_SUPPORTS_CXX14)
 CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
 CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
-if(COMPILER_SUPPORTS_CXX14)
+if(COMPILER_SUPPORTS_CXX17)
+   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
+   add_definitions(-DCOMPILEDWITHC17)
+   message(STATUS "Using flag -std=c++17.")
+elseif(COMPILER_SUPPORTS_CXX14)
    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
    add_definitions(-DCOMPILEDWITHC11)
    message(STATUS "Using flag -std=c++14.")
@@ -47,6 +52,19 @@ find_package(Eigen3 3.1.0 REQUIRED)
 find_package(Pangolin REQUIRED)
 find_package(realsense2)
 
+# Dense mesh reconstruction option
+option(DENSE_MESH "Enable dense mesh reconstruction" OFF)
+
+# Dense point cloud fallback option (used when DENSE_MESH=ON to provide dual output)
+option(USE_DENSE_CLOUD_FALLBACK "Enable dense point cloud fallback output (used with DENSE_MESH=ON)" ON)
+
+# Test framework option
+option(BUILD_TESTS "Build tests" OFF)
+
+if(DENSE_MESH)
+    find_package(Open3D 0.19.0 REQUIRED)
+endif()
+
 add_subdirectory(Thirdparty)
 
 include_directories(
@@ -57,6 +75,11 @@ ${PROJECT_SOURCE_DIR}/Thirdparty/Sophus
 ${EIGEN3_INCLUDE_DIR}
 ${Pangolin_INCLUDE_DIRS}
 )
+
+if(DENSE_MESH)
+    include_directories(${PROJECT_NAME} ${Open3D_INCLUDE_DIRS})
+    include_directories(${PROJECT_SOURCE_DIR}/Examples/RGB-D)
+endif()
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 
@@ -118,9 +141,19 @@ include/GeometricTools.h
 include/TwoViewReconstruction.h
 include/SerializationUtils.h
 include/Config.h
-include/Settings.h)
+include/Settings.h
+)
 
 # add_subdirectory(Thirdparty/g2o)
+
+if(DENSE_MESH)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE DENSE_MESH_ENABLED)
+    target_sources(${PROJECT_NAME} PRIVATE
+        include/KeyFrameRGBDData.h
+        include/DenseMeshReconstruction.h
+        src/DenseMeshReconstruction.cc
+    )
+endif()
 
 target_link_libraries(${PROJECT_NAME}
 ${OpenCV_LIBS}
@@ -131,6 +164,10 @@ ${PROJECT_SOURCE_DIR}/Thirdparty/g2o/lib/libg2o.so
 -lboost_serialization
 -lcrypto
 )
+
+if(DENSE_MESH)
+    target_link_libraries(${PROJECT_NAME} ${Open3D_LIBRARIES})
+endif()
 
 # If RealSense SDK is found the library is added and its examples compiled
 if(realsense2_FOUND)
@@ -144,8 +181,6 @@ endif()
 
 
 # Build examples
-
-# RGB-D examples
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/build)
 
 add_executable(rgbd_tum
@@ -156,6 +191,15 @@ if(realsense2_FOUND)
     add_executable(rgbd_realsense_D435i
             Examples/RGB-D/rgbd_realsense_D435i.cc)
     target_link_libraries(rgbd_realsense_D435i ${PROJECT_NAME})
+    # Pass USE_DENSE_CLOUD_FALLBACK to compiler (convert ON/OFF to 1/0)
+    if(USE_DENSE_CLOUD_FALLBACK)
+        target_compile_definitions(rgbd_realsense_D435i PRIVATE USE_DENSE_CLOUD_FALLBACK=1)
+    else()
+        target_compile_definitions(rgbd_realsense_D435i PRIVATE USE_DENSE_CLOUD_FALLBACK=0)
+    endif()
+    if(DENSE_MESH)
+        target_compile_definitions(rgbd_realsense_D435i PRIVATE DENSE_MESH_ENABLED)
+    endif()
 endif()
 
 
@@ -394,4 +438,10 @@ if(realsense2_FOUND)
     add_executable(stereo_inertial_realsense_D435i_old
             Examples_old/Stereo-Inertial/stereo_inertial_realsense_D435i.cc)
     target_link_libraries(stereo_inertial_realsense_D435i_old ${PROJECT_NAME})
+endif()
+
+# Build tests
+if(BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(test)
 endif()
