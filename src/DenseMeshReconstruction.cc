@@ -277,6 +277,9 @@ bool DenseMeshReconstruction::ExtractMesh(bool incremental_only) {
             impl_->vertex_colors_[i] = Eigen::Vector3d(cd[i*3], cd[i*3+1], cd[i*3+2]);
     }
 
+    ApplyBilateralFilter(impl_->config_.bilateral_spatial_sigma,
+                         impl_->config_.bilateral_color_sigma);
+
     auto end_time = std::chrono::steady_clock::now();
     double ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         end_time - start_time).count();
@@ -428,6 +431,54 @@ void DenseMeshReconstruction::GetMeshData(std::vector<Eigen::Vector3d>& vertices
     vertices = impl_->vertices_;
     triangles = impl_->triangles_;
     colors = impl_->vertex_colors_;
+}
+
+void DenseMeshReconstruction::ApplyBilateralFilter(float spatial_sigma, float color_sigma) {
+    int n = static_cast<int>(impl_->vertices_.size());
+    if (n == 0 || impl_->vertex_colors_.empty()) return;
+
+    open3d::geometry::PointCloud pcd;
+    pcd.points_.resize(n);
+    for (int i = 0; i < n; ++i)
+        pcd.points_[i] = impl_->vertices_[i];
+
+    open3d::geometry::KDTreeFlann kdtree;
+    kdtree.SetGeometry(pcd);
+
+    std::vector<Eigen::Vector3d> filtered(n);
+
+    double spatial_var = 2.0 * spatial_sigma * spatial_sigma;
+    double color_var = 2.0 * color_sigma * color_sigma;
+    double search_radius = 3.0 * spatial_sigma;
+
+    for (int i = 0; i < n; ++i) {
+        std::vector<int> indices;
+        std::vector<double> dists;
+        kdtree.SearchRadius(pcd.points_[i], search_radius, indices, dists);
+
+        Eigen::Vector3d sum(0.0, 0.0, 0.0);
+        double weight_sum = 0.0;
+        Eigen::Vector3d ci = impl_->vertex_colors_[i];
+
+        for (size_t j = 0; j < indices.size(); ++j) {
+            double sw = std::exp(-dists[j] / spatial_var);
+            Eigen::Vector3d diff = impl_->vertex_colors_[indices[j]] - ci;
+            double cw = std::exp(-diff.squaredNorm() / color_var);
+            double w = sw * cw;
+            sum += w * impl_->vertex_colors_[indices[j]];
+            weight_sum += w;
+        }
+
+        if (weight_sum > 0.0)
+            filtered[i] = sum / weight_sum;
+        else
+            filtered[i] = ci;
+    }
+
+    impl_->vertex_colors_ = std::move(filtered);
+
+    std::cout << "[DenseMesh] Bilateral filter: spatial=" << spatial_sigma
+              << "m, color=" << color_sigma << ", " << n << " vertices" << std::endl;
 }
 
 }  // namespace ORB_SLAM3

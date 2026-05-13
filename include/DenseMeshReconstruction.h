@@ -35,11 +35,21 @@ struct MeshReconConfig {
     int update_every_n_kf = 3;
     float thDepth = 3.0f;
 
+    float bilateral_spatial_sigma = 0.015f;
+    float bilateral_color_sigma = 0.12f;
+
     MeshReconConfig() = default;
     MeshReconConfig(float _voxel_length, float _sdf_trunc,
                     int _update_every_n_kf, float _thDepth)
         : voxel_length(_voxel_length), sdf_trunc(_sdf_trunc),
           update_every_n_kf(_update_every_n_kf), thDepth(_thDepth) {}
+    MeshReconConfig(float _voxel_length, float _sdf_trunc,
+                    int _update_every_n_kf, float _thDepth,
+                    float _bilateral_spatial_sigma, float _bilateral_color_sigma)
+        : voxel_length(_voxel_length), sdf_trunc(_sdf_trunc),
+          update_every_n_kf(_update_every_n_kf), thDepth(_thDepth),
+          bilateral_spatial_sigma(_bilateral_spatial_sigma),
+          bilateral_color_sigma(_bilateral_color_sigma) {}
 };
 
 struct MeshStats {
@@ -115,6 +125,8 @@ public:
     void GetMeshData(std::vector<Eigen::Vector3d>& vertices,
                      std::vector<Eigen::Vector3i>& triangles,
                      std::vector<Eigen::Vector3d>& colors) const;
+
+    void ApplyBilateralFilter(float spatial_sigma, float color_sigma);
 
     // Non-copyable
     DenseMeshReconstruction(const DenseMeshReconstruction&) = delete;
@@ -200,6 +212,8 @@ inline void DenseMeshReconstruction::GetMeshData(std::vector<Eigen::Vector3d>& v
                                                   std::vector<Eigen::Vector3d>& colors) const {
     vertices.clear(); triangles.clear(); colors.clear();
 }
+
+inline void DenseMeshReconstruction::ApplyBilateralFilter(float, float) {}
 
 inline DenseMeshReconstruction::DenseMeshReconstruction(
     DenseMeshReconstruction&& other) noexcept
