@@ -93,14 +93,12 @@ struct DenseMeshReconstruction::Impl {
                         const CameraIntrinsics& intrinsics) {
         open3d::core::Device device("CPU:0");
 
-        cv::Mat rgb_rgb;
-        cv::cvtColor(rgb, rgb_rgb, cv::COLOR_BGR2RGB);
-
+        // RealSense D435i outputs RGB8 format directly, no conversion needed
         // Open3D SLAM mode expects (uint16 depth in mm, uint8 color)
         open3d::core::Tensor rgb_tensor(
-            rgb_rgb.ptr<uint8_t>(),
-            {static_cast<int64_t>(rgb_rgb.rows),
-             static_cast<int64_t>(rgb_rgb.cols), 3},
+            rgb.ptr<uint8_t>(),
+            {static_cast<int64_t>(rgb.rows),
+             static_cast<int64_t>(rgb.cols), 3},
             open3d::core::Dtype::UInt8, device);
 
         open3d::core::Tensor depth_tensor(

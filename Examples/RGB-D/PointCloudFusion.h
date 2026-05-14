@@ -89,11 +89,11 @@ inline std::vector<DensePoint> DepthToWorldPoints(
             // Matches Frame::UnprojectStereo: mRwc*Pc + mOw = Twc*Pc
             Eigen::Vector3f Pw = Twc * Eigen::Vector3f(x_cam, y_cam, z);
 
-            // Get RGB color (OpenCV uses BGR format, convert to RGB for PLY)
-            cv::Vec3b bgr = imRGB.at<cv::Vec3b>(v, u);
-            uint8_t b = bgr[0];
-            uint8_t g = bgr[1];
-            uint8_t r = bgr[2];
+            // Get RGB color (RealSense D435i outputs RGB8 format directly)
+            cv::Vec3b rgb_val = imRGB.at<cv::Vec3b>(v, u);
+            uint8_t r = rgb_val[0];
+            uint8_t g = rgb_val[1];
+            uint8_t b = rgb_val[2];
 
             DensePoint pt;
             pt.pos = Pw;
