@@ -61,8 +61,21 @@ option(USE_DENSE_CLOUD_FALLBACK "Enable dense point cloud fallback output (used 
 # Test framework option
 option(BUILD_TESTS "Build tests" OFF)
 
+# ROS2 integration for RGB-D RealSense node
+option(ENABLE_ROS2 "Enable ROS2 integration for RViz2 visualization" OFF)
+
 if(DENSE_MESH)
     find_package(Open3D 0.19.0 REQUIRED)
+endif()
+
+if(ENABLE_ROS2)
+    find_package(rclcpp REQUIRED)
+    find_package(sensor_msgs REQUIRED)
+    find_package(nav_msgs REQUIRED)
+    find_package(tf2 REQUIRED)
+    find_package(tf2_ros REQUIRED)
+    find_package(geometry_msgs REQUIRED)
+    find_package(std_msgs REQUIRED)
 endif()
 
 add_subdirectory(Thirdparty)
@@ -79,6 +92,11 @@ ${Pangolin_INCLUDE_DIRS}
 if(DENSE_MESH)
     include_directories(${PROJECT_NAME} ${Open3D_INCLUDE_DIRS})
     include_directories(${PROJECT_SOURCE_DIR}/Examples/RGB-D)
+endif()
+
+if(ENABLE_ROS2)
+    include_directories(${rclcpp_INCLUDE_DIRS} ${sensor_msgs_INCLUDE_DIRS} ${nav_msgs_INCLUDE_DIRS}
+        ${tf2_INCLUDE_DIRS} ${tf2_ros_INCLUDE_DIRS} ${geometry_msgs_INCLUDE_DIRS} ${std_msgs_INCLUDE_DIRS})
 endif()
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
@@ -438,6 +456,18 @@ if(realsense2_FOUND)
     add_executable(stereo_inertial_realsense_D435i_old
             Examples_old/Stereo-Inertial/stereo_inertial_realsense_D435i.cc)
     target_link_libraries(stereo_inertial_realsense_D435i_old ${PROJECT_NAME})
+endif()
+
+# ROS2 RGB-D RealSense node (requires librealsense2 + ROS2)
+if(realsense2_FOUND AND ENABLE_ROS2)
+    add_executable(rgbd_realsense_D435i_ros2
+            Examples/ROS2/rgbd_realsense_D435i_ros2.cc)
+    target_include_directories(rgbd_realsense_D435i_ros2 PRIVATE
+        ${PROJECT_SOURCE_DIR}/Examples/RGB-D)
+    target_link_libraries(rgbd_realsense_D435i_ros2 ${PROJECT_NAME}
+        ${rclcpp_LIBRARIES} ${sensor_msgs_LIBRARIES} ${nav_msgs_LIBRARIES}
+        ${tf2_LIBRARIES} ${tf2_ros_LIBRARIES} ${geometry_msgs_LIBRARIES})
+    target_compile_definitions(rgbd_realsense_D435i_ros2 PRIVATE ENABLE_ROS2 USE_DENSE_CLOUD_FALLBACK=1)
 endif()
 
 # Build tests
