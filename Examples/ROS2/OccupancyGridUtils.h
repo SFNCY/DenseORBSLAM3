@@ -31,11 +31,31 @@ struct OccupancyGrid {
     std::string frame_id;
 };
 
+/**
+ * @brief Projects a 3D point cloud onto a 2D occupancy grid (ROS XY plane).
+ *
+ * Input point cloud must be in ROS coordinate frame:
+ *   - X = forward (direction of travel)
+ *   - Y = left
+ *   - Z = up (gravity axis)
+ *
+ * The function projects the XY plane (ground plane) to a 2D occupancy grid.
+ * The minHeight/maxHeight parameters filter points along the Z (up) axis,
+ * keeping only points whose Z coordinate is within [minHeight, maxHeight].
+ * This is useful for filtering out ground points or obstacles at specific heights.
+ *
+ * @param points        Vector of 3D points in ROS coordinate frame
+ * @param resolution    Grid cell size in world units (default: 0.05m)
+ * @param minHeight     Minimum Z height to consider (default: -infinity)
+ * @param maxHeight     Maximum Z height to consider (default: +infinity)
+ * @param occupiedThreshold Minimum point count to mark cell as occupied (default: 1)
+ * @return OccupancyGrid 2D grid projected from XY plane
+ */
 inline OccupancyGrid ProjectPointCloudToGrid(
     const std::vector<GridPoint3D>& points,
     double resolution = 0.05,
-    float minZ = -std::numeric_limits<float>::infinity(),
-    float maxZ = std::numeric_limits<float>::infinity(),
+    float minHeight = -std::numeric_limits<float>::infinity(),
+    float maxHeight = std::numeric_limits<float>::infinity(),
     int occupiedThreshold = 1)
 {
     OccupancyGrid grid;
@@ -54,7 +74,7 @@ inline OccupancyGrid ProjectPointCloudToGrid(
     float maxZWorld = std::numeric_limits<float>::lowest();
 
     for (const auto& pt : points) {
-        if (pt.y < minZ || pt.y > maxZ)
+        if (pt.y < minHeight || pt.y > maxHeight)
             continue;
         minX = std::min(minX, pt.x);
         maxX = std::max(maxX, pt.x);
@@ -76,6 +96,10 @@ inline OccupancyGrid ProjectPointCloudToGrid(
 
     grid.width = static_cast<unsigned int>(std::ceil((maxX - minX) / resolution));
     grid.height = static_cast<unsigned int>(std::ceil((maxZWorld - minZWorld) / resolution));
+    // Origin maps ROS frame to grid coordinates:
+    // grid.originX = ROS X (forward direction) -> maps to grid column index (ix)
+    // grid.originY = ROS Z (up) -> but semantically stores ROS Y (left) for grid row index (iz)
+    // This is because we project the ROS XY ground plane onto the grid, using Z as height filter.
     grid.originX = minX;
     grid.originY = minZWorld;
 
@@ -90,7 +114,7 @@ inline OccupancyGrid ProjectPointCloudToGrid(
     std::vector<int> pointCounts(grid.width * grid.height, 0);
 
     for (const auto& pt : points) {
-        if (pt.y < minZ || pt.y > maxZ)
+        if (pt.y < minHeight || pt.y > maxHeight)
             continue;
 
         int ix = static_cast<int>(std::floor((pt.x - minX) / resolution));

@@ -38,6 +38,7 @@
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
 #include <tf2_ros/transform_broadcaster.h>
+#include <tf2_ros/static_transform_broadcaster.h>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include "OccupancyGridUtils.h"
 
@@ -101,6 +102,31 @@ sensor_msgs::msg::PointCloud2 GlobalCloudToPointCloud2(
     }
 
     return msg;
+}
+
+// Camera to ROS coordinate transformation:
+// Camera X-axis (right) -> ROS -Y (left)
+// Camera Y-axis (down)  -> ROS -Z (up)
+// Camera Z-axis (forward) -> ROS +X (forward)
+// R_CAM_TO_ROS maps camera frame to ROS frame
+static const Eigen::Matrix3f R_CAM_TO_ROS = (Eigen::Matrix3f() <<
+    0,  0,  1,
+   -1,  0,  0,
+    0, -1,  0).finished();
+
+static const Eigen::Matrix3f R_ROS_TO_CAM = R_CAM_TO_ROS.transpose();
+
+inline Eigen::Vector3f TransformPoint(const Eigen::Vector3f& pt) {
+    return R_CAM_TO_ROS * pt;
+}
+
+inline Eigen::Quaternionf TransformQuaternion(const Eigen::Quaternionf& q) {
+    Eigen::Matrix3f R = R_CAM_TO_ROS * q.toRotationMatrix() * R_ROS_TO_CAM;
+    return Eigen::Quaternionf(R);
+}
+
+inline Eigen::Vector3f InverseTransformPoint(const Eigen::Vector3f& pt) {
+    return R_ROS_TO_CAM * pt;
 }
 
 #endif
@@ -208,6 +234,21 @@ int main(int argc, char **argv) {
     RCLCPP_INFO(node->get_logger(), "PointCloud2 publisher created on /dense_pointcloud");
 
     auto tf_broadcaster = std::make_unique<tf2_ros::TransformBroadcaster>(node);
+
+    // Static transform broadcaster for map -> slam_origin
+    auto static_tf_broadcaster = std::make_unique<tf2_ros::StaticTransformBroadcaster>(node);
+    geometry_msgs::msg::TransformStamped static_tf;
+    static_tf.header.frame_id = "map";
+    static_tf.child_frame_id = "slam_origin";
+    static_tf.transform.translation.x = 0.0;
+    static_tf.transform.translation.y = 0.0;
+    static_tf.transform.translation.z = 0.0;
+    Eigen::Quaternionf q_cam_to_ros(R_CAM_TO_ROS);
+    static_tf.transform.rotation.x = q_cam_to_ros.x();
+    static_tf.transform.rotation.y = q_cam_to_ros.y();
+    static_tf.transform.rotation.z = q_cam_to_ros.z();
+    static_tf.transform.rotation.w = q_cam_to_ros.w();
+    static_tf_broadcaster->sendTransform(static_tf);
 #endif
 
     rs2::context ctx;
@@ -376,17 +417,19 @@ int main(int argc, char **argv) {
             tf.child_frame_id = "odom";
             tf.header.stamp = node->now();
 
-            Eigen::Vector3f camPos = Tcw.translation();
-            tf.transform.translation.x = camPos.x();
-            tf.transform.translation.y = camPos.y();
-            tf.transform.translation.z = camPos.z();
-
             Sophus::SE3f Twc = Tcw.inverse();
-            Eigen::Quaternionf q(Twc.rotationMatrix());
-            tf.transform.rotation.x = q.x();
-            tf.transform.rotation.y = q.y();
-            tf.transform.rotation.z = q.z();
-            tf.transform.rotation.w = q.w();
+            Eigen::Vector3f camPosWorld = Twc.translation();
+            Eigen::Vector3f rosPos = TransformPoint(camPosWorld);
+            tf.transform.translation.x = rosPos.x();
+            tf.transform.translation.y = rosPos.y();
+            tf.transform.translation.z = rosPos.z();
+
+            Eigen::Matrix3f R_ros_odom = R_CAM_TO_ROS * Twc.rotationMatrix();
+            Eigen::Quaternionf qRos(R_ros_odom);
+            tf.transform.rotation.x = qRos.x();
+            tf.transform.rotation.y = qRos.y();
+            tf.transform.rotation.z = qRos.z();
+            tf.transform.rotation.w = qRos.w();
 
             tf_broadcaster->sendTransform(tf);
         }
@@ -428,9 +471,16 @@ int main(int argc, char **argv) {
 
 #ifdef ENABLE_ROS2
                     if (!globalCloud.empty()) {
-                        size_t pubStride = std::max(size_t(1), globalCloud.size() / 100000);
+                        std::vector<ORB_SLAM3::DensePoint> transformedCloud;
+                        transformedCloud.reserve(globalCloud.size());
+                        for (const auto& pt : globalCloud) {
+                            ORB_SLAM3::DensePoint tpt = pt;
+                            tpt.pos = TransformPoint(pt.pos);
+                            transformedCloud.push_back(tpt);
+                        }
+                        size_t pubStride = std::max(size_t(1), transformedCloud.size() / 100000);
                         auto cloudMsg = GlobalCloudToPointCloud2(
-                            globalCloud, "map", node->now(), pubStride);
+                            transformedCloud, "map", node->now(), pubStride);
                         cloud_pub->publish(cloudMsg);
                     }
 #endif
@@ -481,10 +531,11 @@ int main(int argc, char **argv) {
         std::vector<GridPoint3D> gridPoints;
         gridPoints.reserve(gridDownsampled.size());
         for (const auto& dp : gridDownsampled) {
-            gridPoints.push_back(GridPoint3D(dp.pos.x(), dp.pos.y(), dp.pos.z()));
+            Eigen::Vector3f rosPos = TransformPoint(dp.pos);
+            gridPoints.push_back(GridPoint3D(rosPos.x(), rosPos.y(), rosPos.z()));
         }
 
-        OccupancyGrid occGrid = ProjectPointCloudToGrid(gridPoints, 0.05f);
+        OccupancyGrid occGrid = ProjectPointCloudToGrid(gridPoints, 0.05f, -0.5f, 2.0f);
 
         if (WriteOccupancyGridPGM(occGrid, "map.pgm") &&
             WriteOccupancyGridYAML(occGrid, "map.pgm", "map.yaml")) {
