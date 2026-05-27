@@ -40,7 +40,7 @@ endif()
 
 LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
 
-find_package(OpenCV 4.4)
+find_package(OpenCV 4.10)
    if(NOT OpenCV_FOUND)
       message(FATAL_ERROR "OpenCV > 4.4 not found.")
    endif()
@@ -48,8 +48,8 @@ find_package(OpenCV 4.4)
 MESSAGE("OPENCV VERSION:")
 MESSAGE(${OpenCV_VERSION})
 
-find_package(Eigen3 3.1.0 REQUIRED)
-find_package(Pangolin REQUIRED)
+find_package(Eigen3 3.4.0 REQUIRED)
+find_package(Pangolin 0.9.4 REQUIRED)
 find_package(realsense2)
 
 # Dense mesh reconstruction option
